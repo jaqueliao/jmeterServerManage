@@ -350,7 +350,7 @@ def _help(*args):
     restart: 重启某个机器的jmeter服务，参数同start
     status: 查看某个机器jmeterjmeter相关服务的状态，不带id/ip则为全部
     init：初始化服务器状态
-    upload: 上传文件，格式为：upload file targetDir serverList,如：upload test.csv /root 1 2
+    upload: 上传文件，格式为：upload file targetDir serverList,如：upload test.csv /root/ 1 2
     help: 帮助
     run/sh: 在目标服务器上运行命令，命令格式为：run cmdStatement serverList,如：run ls -al 1,2，第一个参数为run或sh，最后一个参数为服务器列表，多个用逗号分割，all表示所有，中间为要在服务器上运行的命令
     '''
