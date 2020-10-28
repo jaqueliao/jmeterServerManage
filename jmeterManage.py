@@ -11,7 +11,7 @@ class JmeterShell(object):
     def __init__(self, host, port, username, password, jmeter_home=None):
         self.__host = host
         self.__username = username
-        self.__homedir = '/%s/' % (self.__username if self.__username == 'root' else 'home/'+self.__username,)
+        self.__homedir = '/%s/' % (self.__username if self.__username == 'root' else 'home/' + self.__username,)
         self.__jmeterHome = jmeter_home
         self.__sftp = None
         self.__ssh = paramiko.SSHClient()
@@ -61,6 +61,47 @@ class JmeterShell(object):
                 return True, True
             else:
                 return True, False
+
+    def getCpuInfo(self):
+        if not self.__connected:
+            return '0%'
+        command = 'top -bn1 | grep load | awk \'{printf "%.2f%", $(NF-2)}\''
+        result = self.runCommand(command)
+        if result.strip() == '':
+            return '0%'
+        else:
+            return result
+
+    def getMemInfo(self):
+        if not self.__connected:
+            return '0'
+        command = 'free -m | awk \'NR==2{printf "%s/%sM (%.2f%%)", $3,$2,$3*100/$2 }\''
+        result = self.runCommand(command)
+        if result.strip() == '':
+            return '0'
+        else:
+            return result
+
+    def getDiskInfo(self):
+        if not self.__connected:
+            return '0'
+        command = 'df -h | awk \'$NF=="/"{printf "%d/%dGB (%s)", $3,$2,$5}\''
+        result = self.runCommand(command)
+        if result.strip() == '':
+            return '0'
+        else:
+            return result
+
+    def getNetInfo(self):
+        if not self.__connected:
+            return '0'
+        command = 'sar -n DEV 1 1 | grep Average |awk \'NR==2{printf "↓:%sk|↑:%sk", $5,$6 }\''
+        result = self.runCommand(command)
+        if result.strip() == '':
+            netHelp()
+            return '0'
+        else:
+            return result
 
     def uploadFile(self, file, target):
         if not self.__connected:
@@ -193,6 +234,25 @@ class JmeterShell(object):
             return True
         return False
 
+    def sh(self):
+        if not self.__connected:
+            return False
+        shell = self.__ssh.invoke_shell()
+        shell.settimeout(1)
+        command = input("%s@%s #: " % (self.__username, self.__host))
+        shell.send(command + "\n")
+        while True:
+            try:
+                recv = shell.recv(512).decode()
+                if recv:
+                    print(recv)
+                else:
+                    continue
+            except:
+                command = input("")
+                shell.send(command + "\n")
+                # TODO 待优化sh模式
+
 
 def listAll(*args):
     with open('slaveConfig.csv', 'r', encoding='utf-8')as f:
@@ -238,6 +298,26 @@ def status(*args):
         server, test = jmeterShell.runStatus()
         print('\t'.join((id, name, ip, '已安装' if jdk else '未安装', '已安装' if jmeter else '未安装', '运行中' if server else '未启动',
                          '测试中' if test else '未开始')))
+        jmeterShell.close()
+
+
+def monitor(*args):
+    if len(args) == 0:
+        targetList = getTargetSlave('all')
+    else:
+        targetList = getTargetSlave(*args)
+    if not targetList:
+        print('未在列表中找到对应的jmeter-server服务器或者服务器未启用，请检查参数')
+        return
+    print('\t'.join(('id', 'name', 'ip             ', 'CPU   ', '内存                ', '硬盘            ', '网络')))
+    for slave in targetList:
+        id, name, ip = slave[0], slave[1], slave[2]
+        jmeterShell = JmeterShell(slave[2], slave[5], slave[3], slave[4], slave[6])
+        cpu = jmeterShell.getCpuInfo()
+        mem = jmeterShell.getMemInfo()
+        disk = jmeterShell.getDiskInfo()
+        net = jmeterShell.getNetInfo()
+        print('\t'.join((id, name, ip, cpu, mem, disk, net)))
         jmeterShell.close()
 
 
@@ -314,6 +394,24 @@ def run(*args):
         jmeterShell.close()
 
 
+def sh(*args):
+    if len(args) == 0:
+        print('参数错误，进入命令行模式需要一个服务器作为参数！，格式为：sh serverId')
+        return
+    elif len(args) > 1 or args[0] == 'all':
+        print('参数错误，进入命令行模式只能使用一个服务器作为参数！，格式为：sh serverId')
+        return
+    targetList = getTargetSlave(*args)
+    if not targetList:
+        print('未在列表中找到对应的jmeter-server服务器，请检查参数')
+        return
+    slave = targetList[0]
+    jmeterShell = JmeterShell(slave[2], slave[5], slave[3], slave[4], slave[6])
+    print('开始进入 %s 上的命令行模式……' % slave[2])
+    jmeterShell.sh()
+    jmeterShell.close()
+
+
 def init(*args):
     if not os.path.exists('apache-jmeter-5.3.zip'):
         print('jmeter安装包不存在，请下载后放置于本脚本同目录下')
@@ -338,6 +436,7 @@ def _exit(*args):
     print('退出交互模式……')
     exit(0)
 
+
 helped = False
 def _help(*args):
     helpdoc = '''
@@ -345,10 +444,11 @@ def _help(*args):
     所有需要服务器列表的命令中，all代表所有；只有run命令需要的服务器列表参数是使用逗号分隔，其他都是空格分隔的
     q/quit/exit: 退出命令行模式
     ls/list: 列出slaveConfig.csv配置文件内的内容
-    start: 启动某个机器的jmeter服务，例如：start 1 2,启动配置文件内id为1和2的服务器上jmeter-server，或者start 192.168.1.1 192.168.1.2
+    start/stt: 启动某个机器的jmeter服务，例如：start 1 2,启动配置文件内id为1和2的服务器上jmeter-server，或者start 192.168.1.1 192.168.1.2
     stop: 停止某个机器的jmeter服务，参数同start
-    restart: 重启某个机器的jmeter服务，参数同start
-    status: 查看某个机器jmeterjmeter相关服务的状态，不带id/ip则为全部
+    restart/rs: 重启某个机器的jmeter服务，参数同start
+    status/sts: 查看某个机器jmeterjmeter相关服务的状态，不带id/ip则为全部
+    monitor/mon: 查看某些机器的内存/cpu/网络情况
     init：初始化服务器状态
     upload: 上传文件，格式为：upload file targetDir serverList,如：upload test.csv /root/ 1 2
     help: 帮助
@@ -357,6 +457,20 @@ def _help(*args):
     global helped
     helped = True
     print(helpdoc)
+
+
+netHelped = False
+def netHelp():
+    netHelpDoc = '''
+    由于网络监听软件未在对应机器上安装，无法监听到服务器带宽！
+    请在所有需监听的服务器安装 sysstat 包，或者在此命令行下执行 
+    `run yum install -y sysstat all` 或者 ’apt install -y sysstat all‘
+    即可完成所有已启用服务器的 sysstat 安装。
+    '''
+    global netHelped
+    if not netHelped:
+        print(netHelpDoc)
+    netHelped = True
 
 
 def doCmd(*cmdArgList):
@@ -369,6 +483,7 @@ def doCmd(*cmdArgList):
         print('%s 命令不存在，请重新输入' % cmdArgList[0])
         if not helped:
             _help()
+
 
 # 命令行获取并执行用户输入的命令
 def cmds():
@@ -388,6 +503,8 @@ cmdConfig = {'q': _exit,
              'stt': start,
              'stop': stop,
              'status': status,
+             'monitor': monitor,
+             'mon': monitor,
              'sts': status,
              'init': init,
              'ls': listAll,
@@ -396,7 +513,7 @@ cmdConfig = {'q': _exit,
              'upload': upload,
              'up': upload,
              'run': run,
-             'sh': run
+             'sh': sh
              }
 
 args = sys.argv
