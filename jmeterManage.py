@@ -1,3 +1,4 @@
+import asyncio
 from socket import timeout
 
 import paramiko
@@ -267,7 +268,7 @@ def getTargetSlave(*args):
         f_csv = csv.reader(f)
         for row in f_csv:
             if row[-1] == '1':
-                slaveList.append(row)
+                slaveList.append(tuple(row))
     if len(args) == 0:
         print('未发现参数，需要id或者ip')
     if args[0] == 'all':
@@ -377,6 +378,68 @@ def upload(*args):
         jmeterShell.close()
 
 
+def upcsv(*args):
+    noheaderPos = 99
+    noheader = False
+    if '-n' in args:
+        noheader = True
+        noheaderPos = args.index('-n')
+    if len(args) == (2 if not noheader else 3):
+        sourceFile = args[0 if 0 < noheaderPos else 1]
+        targetFile = args[1 if 0 < noheaderPos else 2]
+        serverList = 'all'
+        sliceoption = 'avg'
+    elif len(args) == (4 if not noheader else 5):
+        sourceFile = args[0 if 0 < noheaderPos else 1]
+        targetFile = args[1 if 1 < noheaderPos else 2]
+        serverList = args[2 if 2 < noheaderPos else 3]
+        sliceoption = args[3 if 3 < noheaderPos else 4]
+    else:
+        print('''参数错误，格式为：upcsv sourceFile targetFile [serverList] [sliceoption] [-n], 
+        serverList 为上传的服务器id列表，可选，不填为所有；
+        sliceoption 为切割参数，可配置每个压力机切割的数据条数，如 10,15,10 按10,15,10条数据切割文件后分别上传至压力机，此处设置的数据总条数必须小于sourceFile的条数，且必须与serverList一一对应，此参数不填即为平均切割。
+        -n 表示csv文件第一行不是表头，无此参数则表示第一行为表头 ,此参数放置最后即可
+        如：
+        upcsv D:\\test.csv /root/test.csv #将test.csv平均切割之后上传至所有可用的压力机
+        upcsv D:\\test.csv /root/test.csv 1,3,4 10,15,10 #将test.csv按10,15,10切割之后上传至 1,3,4 的压力机
+        upcsv D:\\test.csv /root/test.csv 1,3 avg -n #将test.csv以无表头的方式平均切割之后上传至 1,3 的压力机
+        upcsv D:\\test.csv /root/test.csv all 10,15,10 #将test.csv按10,15,10切割之后上传至所有可用的压力机，此时可用压力机必须为3个
+        upcsv D:\\test.csv /root/test.csv all 10,15,10 -n #将test.csv以无表头的方式按10,15,10切割之后上传至所有可用的压力机，此时可用压力机必须为3个''')
+        return
+    print(sourceFile, targetFile, serverList, sliceoption)
+    targetList = getTargetSlave(*serverList.strip(',').split(','))
+    sliceList = sliceoption.strip(',').split(',')
+    if 'avg' != sliceoption and len(sliceList) != len(targetList):
+        print("参数错误，切割参数条数与待上传服务器个数不一致", sliceoption, targetList)
+        return
+    # slice(len(targetList), sourceFile)
+    if not os.path.exists(sourceFile):
+        print('待上传文件 %s 不存在，请确认' % sourceFile)
+        return
+    filePath = os.path.dirname(sourceFile)
+    fileNameText, extName = os.path.splitext(sourceFile)
+    if 'avg' == sliceoption:
+        # 平均分配上传，计算每个服务器待上传的行数
+        with open(sourceFile, 'r', encoding='utf-8') as sf:
+            if not noheader:
+                sf.readline()    # 排除表头再统计行数
+            lineCount = len(sf.readlines())
+            sliceList = [round(lineCount/len(targetList)) for target in targetList]
+            sliceList[-1] = lineCount - sum(sliceList[:-1])  # 校准最后一行行数
+    with open(sourceFile, 'r', encoding='utf-8') as sf:
+        header = ''
+        if not noheader:
+            header = sf.readline()
+            print('表头:', header)
+        for i in range(len(sliceList)):
+            fileName = fileNameText + str(i) + extName
+            with open(fileName, 'w', encoding='utf-8') as f:
+                f.write(header)
+                for lineNum in range(int(sliceList[i])):
+                    f.write(sf.readline())
+            upload(fileName, targetFile, targetList[i][0])
+
+
 # 在对应服务器上执行命令，第一个参数为run，最后一个参数为‘,’分隔的服务器id，中间为需要执行的命令,切勿执行无法停止的命令
 def run(*args):
     if len(args) < 2:
@@ -438,6 +501,8 @@ def _exit(*args):
 
 
 helped = False
+
+
 def _help(*args):
     helpdoc = '''
     使用前需先编辑slaveConfig.csv文件，将所有slave配置写入其中。
@@ -451,6 +516,7 @@ def _help(*args):
     monitor/mon: 查看某些机器的内存/cpu/网络情况
     init：初始化服务器状态
     upload: 上传文件，格式为：upload file targetDir serverList,如：upload test.csv /root/ 1 2
+    upcsv： 上传csv文件，可自动切割后上传格式为：upcsv sourceFile targetFile [serverList] [sliceoption] [-n]，详细敲命令后展示说明
     help: 帮助
     run/sh: 在目标服务器上运行命令，命令格式为：run cmdStatement serverList,如：run ls -al 1,2，第一个参数为run或sh，最后一个参数为服务器列表，多个用逗号分割，all表示所有，中间为要在服务器上运行的命令
     '''
@@ -460,6 +526,8 @@ def _help(*args):
 
 
 netHelped = False
+
+
 def netHelp():
     netHelpDoc = '''
     由于网络监听软件未在对应机器上安装，无法监听到服务器带宽！
@@ -512,6 +580,7 @@ cmdConfig = {'q': _exit,
              'help': _help,
              'upload': upload,
              'up': upload,
+             'upcsv': upcsv,
              'run': run,
              'sh': sh
              }
