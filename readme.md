@@ -13,10 +13,12 @@ ls/list: 列出slaveConfig.csv配置文件内的内容
 start: 启动某个机器的jmeter服务，例如：start 1 2,启动配置文件内id为1和2的服务器上jmeter-server，或者start 192.168.1.1 192.168.1.2  
 stop: 停止某个机器的jmeter服务，参数同start  
 restart: 重启某个机器的jmeter服务，参数同start  
-status: 查看某个机器jmeterjmeter相关服务的状态，不带id/ip则为全部  
-init：初始化服务器状态  
-upload: 上传文件，格式为：upload file targetDir serverList,如：upload test.csv /root 1 2  
-help: 帮助  
+status/sts: 查看某个机器jmeterjmeter相关服务的状态，不带id/ip则为全部
+monitor/mon: 查看某些机器的内存/cpu/网络情况
+init：初始化服务器状态
+upload: 上传文件，格式为：upload file targetDir serverList,如：upload test.csv /root/ 1 2
+upcsv： 上传csv文件，可自动切割后上传格式为：upcsv sourceFile targetFile [serverList] [sliceoption] [-n]，详细敲命令后展示说明
+help: 帮助
 run/sh: 在目标服务器上运行命令，命令格式为：run cmdStatement serverList,如：run ls -al 1,2，第一个参数为run或sh，最后一个参数为服务器列表，多个用逗号分割，all表示所有，中间为要在服务器上运行的命令  
 
 本脚本自动安装时默认使用的软件如下：
