@@ -9,11 +9,12 @@ import os
 
 class JmeterShell(object):
 
-    def __init__(self, host, port, username, password, jmeter_home=None):
+    def __init__(self, host, port, username, password, jmeter_home=None, net_card='eth0'):
         self.__host = host
         self.__username = username
         self.__homedir = '/%s/' % (self.__username if self.__username == 'root' else 'home/' + self.__username,)
         self.__jmeterHome = jmeter_home
+        self.__netCard = net_card
         self.__sftp = None
         self.__ssh = paramiko.SSHClient()
         # 创建一个ssh的白名单
@@ -96,7 +97,7 @@ class JmeterShell(object):
     def getNetInfo(self):
         if not self.__connected:
             return '0'
-        command = 'sar -n DEV 1 1 | grep Average |awk \'NR==2{printf "↓:%sk|↑:%sk", $5,$6 }\''
+        command = 'sar -n DEV 1 1 | grep ' + self.__netCard + ' |awk \'NR==2{printf "↓:%sk|↑:%sk", $5,$6 }\''
         result = self.runCommand(command)
         if result.strip() == '':
             netHelp()
@@ -313,7 +314,7 @@ def monitor(*args):
     print('\t'.join(('id', 'name', 'ip             ', 'CPU   ', '内存                ', '硬盘            ', '网络')))
     for slave in targetList:
         id, name, ip = slave[0], slave[1], slave[2]
-        jmeterShell = JmeterShell(slave[2], slave[5], slave[3], slave[4], slave[6])
+        jmeterShell = JmeterShell(slave[2], slave[5], slave[3], slave[4], slave[6], slave[7])
         cpu = jmeterShell.getCpuInfo()
         mem = jmeterShell.getMemInfo()
         disk = jmeterShell.getDiskInfo()
@@ -525,10 +526,10 @@ helped = False
 def _help(*args):
     helpdoc = '''
     使用前需先编辑slaveConfig.csv文件，将所有slave配置写入其中。
-    所有需要服务器列表的命令中，all代表所有；只有run命令需要的服务器列表参数是使用逗号分隔，其他都是空格分隔的
+    所有需要服务器列表的命令中，all代表所有；只有run和upcsv命令需要的服务器列表参数是使用逗号分隔，其他都是空格分隔的
     q/quit/exit: 退出命令行模式
     ls/list: 列出slaveConfig.csv配置文件内的内容
-    start/stt: 启动某个机器的jmeter服务，例如：start 1 2,启动配置文件内id为1和2的服务器上jmeter-server，或者start 192.168.1.1 192.168.1.2
+    start/stt: 启动某个机器的jmeter服务，例如：start 1 2,启动配置文件内id为1和2的服务器上jmeter-server，或者start 192.168.1.1 192.168.1.2，start all表示启动所有机器
     stop: 停止某个机器的jmeter服务，参数同start
     restart/rs: 重启某个机器的jmeter服务，参数同start
     status/sts: 查看某个机器jmeterjmeter相关服务的状态，不带id/ip则为全部
