@@ -380,26 +380,30 @@ def upload(*args):
 
 
 def upcsv(*args):
-    noheaderPos = 99
-    noheader = False
-    if '-n' in args:
+    noheader, sequence = False, False
+    paras = list(args)
+    if '-n' in paras:
         noheader = True
-        noheaderPos = args.index('-n')
-    if len(args) == (2 if not noheader else 3):
-        sourceFile = args[0 if 0 < noheaderPos else 1]
-        targetFile = args[1 if 0 < noheaderPos else 2]
+        paras.remove('-n')
+    if '-s' in paras:
+        sequence = True
+        paras.remove('-s')
+    if len(paras) == 2:
+        sourceFile = paras[0]
+        targetFile = paras[1]
         serverList = 'all'
         sliceoption = 'avg'
-    elif len(args) == (4 if not noheader else 5):
-        sourceFile = args[0 if 0 < noheaderPos else 1]
-        targetFile = args[1 if 1 < noheaderPos else 2]
-        serverList = args[2 if 2 < noheaderPos else 3]
-        sliceoption = args[3 if 3 < noheaderPos else 4]
+    elif len(paras) == 4:
+        sourceFile = paras[0]
+        targetFile = paras[1]
+        serverList = paras[2]
+        sliceoption = paras[3]
     else:
-        print('''参数错误，格式为：upcsv sourceFile targetFile [serverList] [sliceoption] [-n], 
+        print('''参数错误，格式为：upcsv sourceFile targetFile [serverList] [sliceoption] [-n] [-s], 
         serverList 为上传的服务器id列表，可选，不填为所有；
         sliceoption 为切割参数，可配置每个压力机切割的数据条数，如 10,15,10 按10,15,10条数据切割文件后分别上传至压力机，此处设置的数据总条数必须小于sourceFile的条数，且必须与serverList一一对应，此参数不填即为平均切割。
         -n 表示csv文件第一行不是表头，无此参数则表示第一行为表头 ,此参数放置最后即可
+        -s 表示是否按目标服务器顺序依次切割csv文件，若无此参数，则按每个服务器一条数据进行分配直到完成，若有-s参数，则依次填充完第一个服务器的csv文件后上传，再依次填充后续csv
         如：
         upcsv D:\\test.csv /root/test.csv #将test.csv平均切割之后上传至所有可用的压力机
         upcsv D:\\test.csv /root/test.csv 1,3,4 10,15,10 #将test.csv按10,15,10切割之后上传至 1,3,4 的压力机
@@ -407,6 +411,7 @@ def upcsv(*args):
         upcsv D:\\test.csv /root/test.csv all 10,15,10 #将test.csv按10,15,10切割之后上传至所有可用的压力机，此时可用压力机必须为3个
         upcsv D:\\test.csv /root/test.csv all 10,15,10 -n #将test.csv以无表头的方式按10,15,10切割之后上传至所有可用的压力机，此时可用压力机必须为3个''')
         return
+    print(paras)
     print(sourceFile, targetFile, serverList, sliceoption)
     if not os.path.exists(sourceFile):
         print('待上传文件 %s 不存在，请确认' % sourceFile)
@@ -431,30 +436,31 @@ def upcsv(*args):
         if not noheader:
             header = sf.readline()
             print('表头:', header)
-        # for i in range(len(sliceList)):
-        #     fileName = fileNameText + str(i) + extName
-        #     with open(fileName, 'w', encoding='utf-8') as f:
-        #         f.write(header)
-        #         for lineNum in range(int(sliceList[i])):
-        #             f.write(sf.readline())
-        #     upload(fileName, targetFile, targetList[i][0])
-        fileList = []
-        try:
+        if sequence:
             for i in range(len(sliceList)):
                 fileName = fileNameText + str(i) + extName
-                fileList.append(open(fileName, 'w', encoding='utf-8'))
-                fileList[i].write(header)
-            # 逐个文件写入，若行数不够自动停止
-            for lineNum in range(max(sliceList)):
+                with open(fileName, 'w', encoding='utf-8') as f:
+                    f.write(header)
+                    for lineNum in range(int(sliceList[i])):
+                        f.write(sf.readline())
+        else:
+            fileList = []
+            try:
                 for i in range(len(sliceList)):
-                    if sliceList[i] > lineNum:
-                        fileList[i].write(sf.readline())
-        except IOError:
-            print("文件读写出错，请检查相关文件")
-        finally:
-            # 关闭文件并上传
-            for i in range(len(fileList)):
-                fileList[i].close()
+                    fileName = fileNameText + str(i) + extName
+                    fileList.append(open(fileName, 'w', encoding='utf-8'))
+                    fileList[i].write(header)
+                # 逐个文件写入，若行数不够自动停止
+                for lineNum in range(max(sliceList)):
+                    for i in range(len(sliceList)):
+                        if sliceList[i] > lineNum:
+                            fileList[i].write(sf.readline())
+            except IOError:
+                print("文件读写出错，请检查相关文件")
+            finally:
+                # 关闭文件并上传
+                for i in range(len(fileList)):
+                    fileList[i].close()
     # 逐个上传文件
     for i in range(len(sliceList)):
         fileName = fileNameText + str(i) + extName
