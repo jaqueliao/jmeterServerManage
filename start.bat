@@ -1,1 +1,2 @@
 python jmeterManage.py
+pause

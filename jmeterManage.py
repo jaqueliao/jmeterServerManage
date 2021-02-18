@@ -5,6 +5,8 @@ import paramiko
 import sys
 import csv
 import os
+import inspect
+import re
 
 
 class JmeterShell(object):
@@ -257,6 +259,14 @@ class JmeterShell(object):
 
 
 def listAll(*args):
+    """
+    :desc 列出slaveConfig.csv配置文件内的内容
+    :command list
+    :command ls
+    :example ls
+    :param args: 无参数
+    :return: 无
+    """
     with open('slaveConfig.csv', 'r', encoding='utf-8')as f:
         f_csv = csv.reader(f)
         for row in f_csv:
@@ -284,6 +294,15 @@ def getTargetSlave(*args):
 
 
 def status(*args):
+    """
+    :desc 查看某个机器jmeterServer相关服务的状态
+    :command status
+    :command sts
+    :example sts,显示所有服务器jmeterServer状态
+    :example status 1 2，显示服务器1和2的jmeterServer状态
+    :param args: 格式为：status serverList，serverList 服务器列表，空格分隔，无参数则为全部
+    :return: 无
+    """
     if len(args) == 0:
         targetList = getTargetSlave('all')
     else:
@@ -304,6 +323,15 @@ def status(*args):
 
 
 def monitor(*args):
+    """
+    :desc 查看某些机器的内存/cpu/网络情况
+    :command monitor
+    :command mon
+    :example monitor,显示所有服务器资源情况
+    :example monitor 1 2，显示服务器1和2的资源情况
+    :param args: 格式为：monitor serverList，serverList 服务器列表，空格分隔，无参数则为全部
+    :return: 无
+    """
     if len(args) == 0:
         targetList = getTargetSlave('all')
     else:
@@ -324,6 +352,16 @@ def monitor(*args):
 
 
 def start(*args):
+    """
+    :desc 启动某个机器的jmeter服务
+    :command start
+    :command stt
+    :example start 1 2,停止配置文件内id为1和2的服务器上jmeter-server
+    :example start 192.168.1.1 192.168.1.2
+    :example start all表示启动所有机器
+    :param args: 格式为：start serverList，serverList 服务器列表，空格分隔
+    :return: 无
+    """
     if len(args) == 0:
         print('未发现参数，需要id或者ip')
         return
@@ -338,6 +376,15 @@ def start(*args):
 
 
 def stop(*args):
+    """
+    :desc 停止某个机器的jmeter服务
+    :command stop
+    :example stop 1 2,停止配置文件内id为1和2的服务器上jmeter-server
+    :example stop 192.168.1.1 192.168.1.2
+    :example stop all表示启动所有机器
+    :param args: 格式为：stop serverList，serverList 服务器列表，空格分隔
+    :return: 无
+    """
     if len(args) == 0:
         print('未发现参数，需要id或者ip')
         return
@@ -352,6 +399,16 @@ def stop(*args):
 
 
 def restart(*args):
+    """
+    :desc 重启某个机器的jmeter服务
+    :command restart
+    :command rs
+    :example restart 1 2,重启配置文件内id为1和2的服务器上jmeter-server
+    :example restart 192.168.1.1 192.168.1.2
+    :example restart all表示启动所有机器
+    :param args: 格式为：restart serverList，serverList 服务器列表，空格分隔
+    :return: 无
+    """
     if len(args) == 0:
         print('未发现参数，需要id或者ip')
         return
@@ -366,6 +423,14 @@ def restart(*args):
 
 
 def upload(*args):
+    """
+    :desc 上传文件到服务器
+    :command upload
+    :command up
+    :example upload D:\\test.csv /root/test.csv 1 2
+    :param args: 格式为：upload file targetDir serverList，file 本地文件路径，targetDir 目标服务器的文件路径（需存在），serverList 服务器列表，空格分隔
+    :return: 无
+    """
     if len(args) < 3:
         print('参数错误，格式为：upload sourceFile targetFile serverList,如：upload D:\\test.csv /root/test.csv 1 2')
         return
@@ -380,6 +445,17 @@ def upload(*args):
 
 
 def upcsv(*args):
+    """
+    :desc 上传csv文件，可自动切割后上传
+    :command upcsv
+    :example upcsv D:\\test.csv /root/test.csv #将test.csv平均切割之后上传至所有可用的压力机
+    :example upcsv D:\\test.csv /root/test.csv 1,3,4 10,15,10 #将test.csv按10,15,10切割之后上传至 1,3,4 的压力机
+    :example upcsv D:\\test.csv /root/test.csv 1,3 avg -n #将test.csv以无表头的方式平均切割之后上传至 1,3 的压力机
+    :example upcsv D:\\test.csv /root/test.csv all 10,15,10 #将test.csv按10,15,10切割之后上传至所有可用的压力机，此时可用压力机必须为3个
+    :example upcsv D:\\test.csv /root/test.csv all 10,15,10 -n #将test.csv以无表头的方式按10,15,10切割之后上传至所有可用的压力机，此时可用压力机必须为3个
+    :param args: 格式为：upcsv sourceFile targetFile [serverList] [sliceoption] [-n] [-s]，serverList 为上传的服务器id列表，可选，不填为所有； sliceoption 为切割参数，可配置每个压力机切割的数据条数，如 10,15,10 按10,15,10条数据切割文件后分别上传至压力机，此处设置的数据总条数必须小于sourceFile的条数，且必须与serverList一一对应，此参数不填即为平均切割；-n 表示csv文件第一行不是表头，无此参数则表示第一行为表头；-s 表示是否按目标服务器顺序依次切割csv文件，若无此参数，则按每个服务器一条数据进行分配直到完成，若有-s参数，则依次填充完第一个服务器的csv文件后上传，再依次填充后续csv。
+    :return: 无
+    """
     noheader, sequence = False, False
     paras = list(args)
     if '-n' in paras:
@@ -399,17 +475,8 @@ def upcsv(*args):
         serverList = paras[2]
         sliceoption = paras[3]
     else:
-        print('''参数错误，格式为：upcsv sourceFile targetFile [serverList] [sliceoption] [-n] [-s], 
-        serverList 为上传的服务器id列表，可选，不填为所有；
-        sliceoption 为切割参数，可配置每个压力机切割的数据条数，如 10,15,10 按10,15,10条数据切割文件后分别上传至压力机，此处设置的数据总条数必须小于sourceFile的条数，且必须与serverList一一对应，此参数不填即为平均切割。
-        -n 表示csv文件第一行不是表头，无此参数则表示第一行为表头 ,此参数放置最后即可
-        -s 表示是否按目标服务器顺序依次切割csv文件，若无此参数，则按每个服务器一条数据进行分配直到完成，若有-s参数，则依次填充完第一个服务器的csv文件后上传，再依次填充后续csv
-        如：
-        upcsv D:\\test.csv /root/test.csv #将test.csv平均切割之后上传至所有可用的压力机
-        upcsv D:\\test.csv /root/test.csv 1,3,4 10,15,10 #将test.csv按10,15,10切割之后上传至 1,3,4 的压力机
-        upcsv D:\\test.csv /root/test.csv 1,3 avg -n #将test.csv以无表头的方式平均切割之后上传至 1,3 的压力机
-        upcsv D:\\test.csv /root/test.csv all 10,15,10 #将test.csv按10,15,10切割之后上传至所有可用的压力机，此时可用压力机必须为3个
-        upcsv D:\\test.csv /root/test.csv all 10,15,10 -n #将test.csv以无表头的方式按10,15,10切割之后上传至所有可用的压力机，此时可用压力机必须为3个''')
+        print("参数错误，请检查后重新输入！")
+        _help("upcsv")
         return
     print(paras)
     print(sourceFile, targetFile, serverList, sliceoption)
@@ -466,8 +533,16 @@ def upcsv(*args):
         fileName = fileNameText + str(i) + extName
         upload(fileName, targetFile, targetList[i][0])
 
+
 # 在对应服务器上执行命令，第一个参数为run，最后一个参数为‘,’分隔的服务器id，中间为需要执行的命令,切勿执行无法停止的命令
 def run(*args):
+    """
+    :desc 在目标服务器上运行命令
+    :command run
+    :example run ls -al 1,2，第一个参数为run，最后一个参数为服务器列表，多个用逗号分割，all表示所有，中间为要在服务器上运行的命令
+    :param args: 命令格式为：run cmdStatement serverList，要执行的命令 cmdStatement，服务器列表 serverList
+    :return: 无
+    """
     if len(args) < 2:
         print('参数错误，格式为：run "cmd" serverList,如：run ls -al 1,2')
         return
@@ -484,6 +559,14 @@ def run(*args):
 
 
 def sh(*args):
+    """
+    :desc 进入某个服务器的sh模式
+    :command sh
+    :example sh 1，进入id为1的服务器的sh模式
+    :example sh 192.168.1.1，进入ip为192.168.1.1的服务器的sh模式
+    :param args: serverId-服务器id，或者serverIp-服务器的ip
+    :return: 无
+    """
     if len(args) == 0:
         print('参数错误，进入命令行模式需要一个服务器作为参数！，格式为：sh serverId')
         return
@@ -496,12 +579,19 @@ def sh(*args):
         return
     slave = targetList[0]
     jmeterShell = JmeterShell(slave[2], slave[5], slave[3], slave[4], slave[6])
-    print('开始进入 %s 上的命令行模式……' % slave[2])
+    print('开始进入 %s 上的命令行模式……，退出使用exit' % slave[2])
     jmeterShell.sh()
     jmeterShell.close()
 
 
 def init(*args):
+    """
+    :desc 初始化服务器状态
+    :command init
+    :example init，初始化服务器状态
+    :param args:无需参数
+    :return: 无
+    """
     if not os.path.exists('apache-jmeter-5.3.zip'):
         print('jmeter安装包不存在，请下载后放置于本脚本同目录下')
         return
@@ -522,6 +612,15 @@ def init(*args):
 
 
 def _exit(*args):
+    """
+    :desc 退出命令行模式
+    :command exit
+    :command quit
+    :command q
+    :example q/quit/exit，退出命令行模式
+    :param args:无需参数
+    :return: 无
+    """
     print('退出交互模式……')
     exit(0)
 
@@ -530,26 +629,30 @@ helped = False
 
 
 def _help(*args):
-    helpdoc = '''
-    使用前需先编辑slaveConfig.csv文件，将所有slave配置写入其中。
-    所有需要服务器列表的命令中，all代表所有；只有run和upcsv命令需要的服务器列表参数是使用逗号分隔，其他都是空格分隔的
-    q/quit/exit: 退出命令行模式
-    ls/list: 列出slaveConfig.csv配置文件内的内容
-    start/stt: 启动某个机器的jmeter服务，例如：start 1 2,启动配置文件内id为1和2的服务器上jmeter-server，或者start 192.168.1.1 192.168.1.2，start all表示启动所有机器
-    stop: 停止某个机器的jmeter服务，参数同start
-    restart/rs: 重启某个机器的jmeter服务，参数同start
-    status/sts: 查看某个机器jmeterjmeter相关服务的状态，不带id/ip则为全部
-    monitor/mon: 查看某些机器的内存/cpu/网络情况
-    init：初始化服务器状态
-    upload: 上传文件，格式为：upload file targetDir serverList,如：upload test.csv /root/ 1 2
-    upcsv： 上传csv文件，可自动切割后上传格式为：upcsv sourceFile targetFile [serverList] [sliceoption] [-n]，详细敲命令后展示说明
-    help: 帮助
-    run/sh: 在目标服务器上运行命令，命令格式为：run cmdStatement serverList,如：run ls -al 1,2，第一个参数为run或sh，最后一个参数为服务器列表，多个用逗号分割，all表示所有，中间为要在服务器上运行的命令
-    '''
+    """
+    :desc 帮助
+    :command help
+    :command h
+    :example help,显示帮助信息
+    :param args: 无
+    :return: 无
+    """
+    if len(args) == 0:
+        print("请使用 help command 查看命令详细介绍,下面是本工具支持的命令：")
+        for cmdConfig in cmdConfigList:
+            print("%s:%s" % ("/".join(cmdConfig.get('command')), ",".join(cmdConfig.get('desc'))))
+    else:
+        for argv in args:
+            for cmdConfig in cmdConfigList:
+                if argv in cmdConfig.get('command'):
+                    print("%s:%s" % ("/".join(cmdConfig.get('command')), ",".join(cmdConfig.get('desc'))))
+                    print(",".join(cmdConfig.get('param')))
+                    print("例如：")
+                    for example in cmdConfig.get('example'):
+                        print(example)
+                    break
     global helped
     helped = True
-    print(helpdoc)
-
 
 netHelped = False
 
@@ -568,11 +671,13 @@ def netHelp():
 
 
 def doCmd(*cmdArgList):
-    if len(cmdArgList) > 0 and cmdConfig.get(cmdArgList[0]):
-        cmdConfig.get(cmdArgList[0])(*cmdArgList[1:])
-    elif len(cmdArgList) == 0:
+    if len(cmdArgList) == 0:
         # 命令行模式下未输入任何内容，就不执行任何动作；非命令行不带参执行会进入命令行模式
-        pass
+        return
+    for cmdConfig in cmdConfigList:
+        if cmdArgList[0] in cmdConfig.get('command'):
+            cmdConfig.get('fuc')(*cmdArgList[1:])
+            break
     else:
         print('%s 命令不存在，请重新输入' % cmdArgList[0])
         if not helped:
@@ -587,35 +692,38 @@ def cmds():
         doCmd(*cmdArgList)
 
 
-# 命令与动作映射表
-cmdConfig = {'q': _exit,
-             'exit': _exit,
-             'quit': _exit,
-             'restart': restart,
-             'rs': restart,
-             'start': start,
-             'stt': start,
-             'stop': stop,
-             'status': status,
-             'monitor': monitor,
-             'mon': monitor,
-             'sts': status,
-             'init': init,
-             'ls': listAll,
-             'list': listAll,
-             'help': _help,
-             'upload': upload,
-             'up': upload,
-             'upcsv': upcsv,
-             'run': run,
-             'sh': sh
-             }
+def praseDoc(doc):
+    docDict = {}
+    pattern = re.compile(r":(\w+)\s(.*)")
+    for key, value in pattern.findall(doc):
+        # print(key, value)
+        if not docDict.get(key):
+            docDict[key] = []
+        docDict[key].append(value)
+    return docDict
 
-args = sys.argv
-if len(args) == 1:
-    # 不带参执行会进入命令行模式
-    print('进入命令行模式：')
-    cmds()
-else:
-    # 带参就直接执行对应命令
-    doCmd(*args[1:])
+
+# 命令与动作映射表
+cmdConfigList = []
+
+
+def praseCmd():
+    global cmdConfigList
+    for name, obj in inspect.getmembers(sys.modules[__name__]):
+        if inspect.isfunction(obj) and obj.__doc__:
+            docDict = praseDoc(obj.__doc__)
+            docDict["name"] = name
+            docDict["fuc"] = obj
+            cmdConfigList.append(docDict)
+
+
+if __name__ == "__main__":
+    praseCmd()
+    args = sys.argv
+    if len(args) == 1:
+        # 不带参执行会进入命令行模式
+        print('进入命令行模式：')
+        cmds()
+    else:
+        # 带参就直接执行对应命令
+        doCmd(*args[1:])
