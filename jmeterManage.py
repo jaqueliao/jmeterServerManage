@@ -257,6 +257,36 @@ class JmeterShell(object):
                 shell.send(command + "\n")
                 # TODO 待优化sh模式
 
+    def listHosts(self):
+        if not self.__connected:
+            return
+        command = 'sar -n DEV 1 1 | grep ' + self.__netCard + ' |awk \'NR==2{printf "↓:%sk|↑:%sk", $5,$6 }\''
+        command = 'cat /etc/hosts |grep -v ^#|grep -v ^$'
+        result = self.runCommand(command)
+        return result
+
+    def delHosts(self, param):
+        if self.__username != 'root':
+            print('%s 当前配置的用户不是root，无法执行此命令' % self.__host)
+            return
+        content = ' '.join(param)
+        delCommand = "sed -i -e '/" + content + "/d' /etc/hosts"
+        print('%s 开始删除hosts记录：%s' % (self.__host, content))
+        self.runCommand(delCommand)
+        print('%s 删除hosts记录成功' % self.__host)
+
+    def addHosts(self, param):
+        if self.__username != 'root':
+            print('%s 当前配置的用户不是root，无法执行此命令' % self.__host)
+            return
+        content = ' '.join(param)
+        addCommand = 'echo ' + content + ' >> /etc/hosts'
+        print('%s 开始添加hosts记录：%s' % (self.__host, content))
+        self.runCommand(addCommand)
+        print('%s 添加hosts记录成功' % self.__host)
+
+
+
 
 def listAll(*args):
     """
@@ -488,9 +518,9 @@ def upcsv(*args):
         # 平均分配上传，计算每个服务器待上传的行数
         with open(sourceFile, 'r', encoding='utf-8') as sf:
             if not noheader:
-                sf.readline()    # 排除表头再统计行数
+                sf.readline()  # 排除表头再统计行数
             lineCount = len(sf.readlines())
-            sliceList = [round(lineCount/len(targetList)) for target in targetList]
+            sliceList = [round(lineCount / len(targetList)) for target in targetList]
             sliceList[-1] = lineCount - sum(sliceList[:-1])  # 校准最后一行行数
     else:
         sliceList = [int(s) for s in sliceoption.strip(',').split(',')]
@@ -582,6 +612,42 @@ def sh(*args):
     print('开始进入 %s 上的命令行模式……，退出使用exit' % slave[2])
     jmeterShell.sh()
     jmeterShell.close()
+
+
+def host(*args):
+    """
+    :desc 操作目标压力机的host，查看，增加，删除等
+    :command host
+    :example host -option [content] serverList
+    :example host -l 1,2  列出压力机1,2中的hosts配置
+    :example host -d 10.0.1.1 1,2  在压力机1,2中删除ip包含10.0.1.1的那条hosts
+    :example host -d test.example.com 1,2  在压力机1,2中删除域名包含test.example.com的那条hosts
+    :example host -a 10.0.1.1 test.example.com 1,2  在压力机1,2中添加一条host记录 10.0.1.1 test.example.com
+    :param args: option-操作，content-操作的内容，serverList-压力机列表
+    :return: 无
+    """
+    if len(args) < 2:
+        print('参数错误，格式为：host -option [content] serverList')
+        return
+    option = args[0]
+    if option not in ['-l', '-d', '-a']:
+        print('参数错误，格式为：host -option [content] serverList')
+    targetList = getTargetSlave(*args[-1].split(','))
+    if not targetList:
+        print('未在列表中找到对应的jmeter-server服务器，请检查参数')
+        return
+    for slave in targetList:
+        jmeterShell = JmeterShell(slave[2], slave[5], slave[3], slave[4], slave[6])
+        if option == '-l':
+            result = jmeterShell.listHosts()
+            print('%s 上的hosts记录为：\n %s' % (slave[2], result))
+        elif option == '-d':
+            print('开始删除 %s 上的hosts记录' % slave[2])
+            jmeterShell.delHosts(args[1:-1])
+        elif option == '-a':
+            print('开始给 %s 上添加hosts记录' % slave[2])
+            jmeterShell.addHosts(args[1:-1])
+        jmeterShell.close()
 
 
 def init(*args):
@@ -719,11 +785,11 @@ def praseCmd():
 
 if __name__ == "__main__":
     praseCmd()
-    args = sys.argv
-    if len(args) == 1:
+    params = sys.argv
+    if len(params) == 1:
         # 不带参执行会进入命令行模式
         print('进入命令行模式：')
         cmds()
     else:
         # 带参就直接执行对应命令
-        doCmd(*args[1:])
+        doCmd(*params[1:])
